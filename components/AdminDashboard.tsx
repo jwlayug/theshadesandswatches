@@ -671,6 +671,10 @@ const PortfolioManager: React.FC = () => {
   
   const [saving, setSaving] = useState(false);
 
+  // Tabs
+  const [activeCollectionTab, setActiveCollectionTab] = useState<string>('All');
+  const [activeProjectTab, setActiveProjectTab] = useState<string>('All');
+
   const refresh = async () => {
     setCategories(await getCollection<PortfolioCategory>('categories'));
     setProjects(await getCollection<PortfolioProject>('projects'));
@@ -740,6 +744,36 @@ const PortfolioManager: React.FC = () => {
        refresh();
     }
   };
+
+  // --- Filtering ---
+  const filteredCategories = activeCollectionTab === 'All' 
+    ? categories 
+    : categories.filter(c => c.mainCategory === activeCollectionTab);
+
+  const filteredProjects = activeProjectTab === 'All'
+    ? projects
+    : projects.filter(p => {
+        const cat = categories.find(c => c.id === p.categoryId);
+        return cat?.mainCategory === activeProjectTab;
+    });
+
+  const TabGroup = ({ active, onChange }: { active: string, onChange: (val: string) => void }) => (
+     <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-100">
+        {['All', 'Curtains', 'Blinds', 'Furniture Covers'].map(tab => (
+           <button
+             key={tab}
+             onClick={() => onChange(tab)}
+             className={`px-4 py-3 text-xs font-bold uppercase tracking-widest relative top-[1px] transition-colors ${
+                active === tab 
+                  ? 'text-brand-dark border-b-2 border-brand-gold' 
+                  : 'text-gray-400 hover:text-brand-dark'
+             }`}
+           >
+             {tab}
+           </button>
+        ))}
+     </div>
+  );
 
   return (
     <div className="animate-fadeIn">
@@ -874,9 +908,12 @@ const PortfolioManager: React.FC = () => {
         <div className="space-y-12">
           {/* Categories Section */}
           <section>
-             <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-6 border-b pb-2">Active Collections</h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               {categories.map(cat => (
+             <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-6">Active Collections</h3>
+             
+             <TabGroup active={activeCollectionTab} onChange={setActiveCollectionTab} />
+
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
+               {filteredCategories.map(cat => (
                  <div key={cat.id} className="group relative bg-white rounded-sm shadow-sm border border-gray-100 overflow-hidden">
                     <div className="h-48 overflow-hidden relative">
                        <img src={cat.coverImage} alt={cat.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
@@ -896,17 +933,20 @@ const PortfolioManager: React.FC = () => {
                     </div>
                  </div>
                ))}
-               {categories.length === 0 && <p className="text-gray-400 italic">No categories yet.</p>}
+               {filteredCategories.length === 0 && <div className="col-span-full text-center py-8 text-gray-400 italic">No categories found for this filter.</div>}
              </div>
           </section>
 
           {/* Projects Section */}
           <section>
-             <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-6 border-b pb-2">Recent Projects</h3>
-             <div className="bg-white rounded-sm shadow-sm border border-gray-100 overflow-hidden">
-                {projects.length > 0 ? (
+             <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-6">Recent Projects</h3>
+             
+             <TabGroup active={activeProjectTab} onChange={setActiveProjectTab} />
+
+             <div className="bg-white rounded-sm shadow-sm border border-gray-100 overflow-hidden animate-fadeIn">
+                {filteredProjects.length > 0 ? (
                   <div className="divide-y divide-gray-100">
-                    {projects.map(p => {
+                    {filteredProjects.map(p => {
                       const cat = categories.find(c => c.id === p.categoryId);
                       return (
                         <div key={p.id} className="flex items-center p-4 hover:bg-gray-50 transition-colors">
@@ -924,7 +964,7 @@ const PortfolioManager: React.FC = () => {
                     })}
                   </div>
                 ) : (
-                  <div className="p-8 text-center text-gray-400">No projects uploaded yet.</div>
+                  <div className="p-8 text-center text-gray-400">No projects found for this filter.</div>
                 )}
              </div>
           </section>
