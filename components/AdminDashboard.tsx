@@ -555,7 +555,8 @@ const ServiceManager: React.FC = () => {
 const TestimonialManager: React.FC = () => {
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
   const [newItem, setNewItem] = useState<Testimonial>({ name: '', role: '', content: '', rating: 5, image: '' });
-  const [view, setView] = useState<'list' | 'add'>('list');
+  const [editItem, setEditItem] = useState<Testimonial | null>(null);
+  const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
   const [saving, setSaving] = useState(false);
 
   const refresh = async () => setTestimonials(await getCollection<Testimonial>('testimonials'));
@@ -566,6 +567,23 @@ const TestimonialManager: React.FC = () => {
     setSaving(true);
     await addToCollection('testimonials', newItem);
     setNewItem({ name: '', role: '', content: '', rating: 5, image: '' });
+    await refresh();
+    setSaving(false);
+    setView('list');
+  };
+
+  const startEdit = (t: Testimonial) => {
+    setEditItem({...t});
+    setView('edit');
+  }
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editItem || !editItem.id) return;
+    setSaving(true);
+    const { id, ...data } = editItem;
+    await updateDocument('testimonials', id, data);
+    setEditItem(null);
     await refresh();
     setSaving(false);
     setView('list');
@@ -592,7 +610,10 @@ const TestimonialManager: React.FC = () => {
 
       {view === 'add' && (
         <div className="bg-white p-8 rounded-sm shadow-lg border-t-4 border-brand-gold mb-8">
-           <h3 className="text-xl font-serif font-bold text-brand-dark mb-6">Add Client Testimonial</h3>
+           <div className="flex justify-between items-center mb-6">
+             <h3 className="text-xl font-serif font-bold text-brand-dark">Add Client Testimonial</h3>
+             <IconButton onClick={() => setView('list')} className="hover:bg-gray-100"><X className="w-5 h-5"/></IconButton>
+           </div>
            <form onSubmit={handleAdd} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <InputGroup label="Client Name">
@@ -623,6 +644,42 @@ const TestimonialManager: React.FC = () => {
         </div>
       )}
 
+      {view === 'edit' && editItem && (
+        <div className="bg-white p-8 rounded-sm shadow-lg border-t-4 border-brand-gold mb-8">
+           <div className="flex justify-between items-center mb-6">
+             <h3 className="text-xl font-serif font-bold text-brand-dark">Edit Client Testimonial</h3>
+             <IconButton onClick={() => setView('list')} className="hover:bg-gray-100"><X className="w-5 h-5"/></IconButton>
+           </div>
+           <form onSubmit={handleUpdate} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <InputGroup label="Client Name">
+                 <StyledInput value={editItem.name} onChange={e=>setEditItem({...editItem, name: e.target.value})} required />
+              </InputGroup>
+              <InputGroup label="Role / Title">
+                 <StyledInput placeholder="e.g. Homeowner, Interior Designer" value={editItem.role} onChange={e=>setEditItem({...editItem, role: e.target.value})} required />
+              </InputGroup>
+            </div>
+            
+            <InputGroup label="Testimonial Content">
+               <StyledTextArea placeholder="What did they say?" value={editItem.content} onChange={e=>setEditItem({...editItem, content: e.target.value})} required />
+            </InputGroup>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <InputGroup label="Rating (1-5)">
+                  <StyledInput type="number" max="5" min="1" value={editItem.rating} onChange={e=>setEditItem({...editItem, rating: parseInt(e.target.value)})} required />
+               </InputGroup>
+               <InputGroup label="Client Photo URL (Optional)">
+                  <StyledInput value={editItem.image} onChange={e=>setEditItem({...editItem, image: e.target.value})} />
+               </InputGroup>
+            </div>
+            <div className="flex justify-end gap-4 pt-4 border-t border-gray-100">
+              <button type="button" onClick={() => setView('list')} className="text-gray-400 hover:text-brand-dark font-bold uppercase text-xs tracking-widest px-4">Cancel</button>
+              <PrimaryButton type="submit" disabled={saving}>{saving ? 'Updating...' : 'Update Review'}</PrimaryButton>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {testimonials.map(t => (
           <div key={t.id} className="bg-white rounded-sm shadow-sm p-8 relative border border-gray-100 hover:shadow-md transition-shadow">
@@ -639,13 +696,18 @@ const TestimonialManager: React.FC = () => {
              
              <div className="flex items-center gap-4 pt-6 border-t border-gray-100">
                <img src={t.image || 'https://via.placeholder.com/40'} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
-               <div>
+               <div className="flex-1">
                  <div className="font-serif font-bold text-brand-dark text-lg">{t.name}</div>
                  <div className="text-xs text-gray-400 uppercase tracking-wider">{t.role}</div>
                </div>
-               <IconButton onClick={() => handleDelete(t.id!)} className="ml-auto text-gray-300 hover:text-red-500 hover:bg-red-50">
-                 <Trash2 className="w-5 h-5" />
-               </IconButton>
+               <div className="flex gap-2">
+                 <IconButton onClick={() => startEdit(t)} className="text-gray-300 hover:text-brand-gold hover:bg-brand-gold/10">
+                   <Pencil className="w-5 h-5" />
+                 </IconButton>
+                 <IconButton onClick={() => handleDelete(t.id!)} className="text-gray-300 hover:text-red-500 hover:bg-red-50">
+                   <Trash2 className="w-5 h-5" />
+                 </IconButton>
+               </div>
              </div>
           </div>
         ))}
