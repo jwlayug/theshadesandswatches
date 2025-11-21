@@ -6,6 +6,7 @@ import {
   getDocs, 
   addDoc, 
   deleteDoc, 
+  updateDoc,
   doc,
   getDoc,
   setDoc
@@ -32,12 +33,13 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const auth = getAuth(app);
 
-// --- In-Memory Session Cache (For temporary offline capability during session) ---
+// --- In-Memory Session Cache (For optimistic UI updates & offline capability) ---
 const SESSION_CACHE: Record<string, any[]> = {
   categories: [],
   projects: [],
   services: [],
-  testimonials: []
+  testimonials: [],
+  clients: []
 };
 
 const DOC_CACHE: Record<string, any> = {};
@@ -54,9 +56,12 @@ export const getCollection = async <T>(collectionName: string): Promise<T[]> => 
     results = [];
   }
 
-  // Merge Session Cache
+  // Merge Session Cache (items added in this session that might not be in DB yet or if DB failed)
   if (SESSION_CACHE[collectionName]) {
-    results = [...results, ...SESSION_CACHE[collectionName] as unknown as T[]];
+    // Avoid duplicates by ID
+    const existingIds = new Set(results.map((r: any) => r.id));
+    const sessionItems = SESSION_CACHE[collectionName].filter(item => !existingIds.has(item.id));
+    results = [...results, ...sessionItems as unknown as T[]];
   }
   
   return results;
@@ -71,7 +76,9 @@ export const getDocument = async <T>(collectionName: string, docId: string): Pro
     const docRef = doc(db, collectionName, docId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return docSnap.data() as T;
+      const data = docSnap.data() as T;
+      DOC_CACHE[cacheKey] = data; // Cache it
+      return data;
     }
     return null;
   } catch (error) {
@@ -81,42 +88,74 @@ export const getDocument = async <T>(collectionName: string, docId: string): Pro
 };
 
 export const addToCollection = async (collectionName: string, data: any) => {
+  // Optimistically add to session cache
+  const fakeId = 'temp_' + Date.now();
+  const newItem = { id: fakeId, ...data };
+  
+  if (!SESSION_CACHE[collectionName]) SESSION_CACHE[collectionName] = [];
+  SESSION_CACHE[collectionName].push(newItem);
+
   try {
-    return await addDoc(collection(db, collectionName), data);
+    const docRef = await addDoc(collection(db, collectionName), data);
+    // Update the cached item with the real ID
+    const index = SESSION_CACHE[collectionName].findIndex(item => item.id === fakeId);
+    if (index !== -1) {
+      SESSION_CACHE[collectionName][index] = { id: docRef.id, ...data };
+    }
+    return docRef;
   } catch (error: any) {
-    console.warn("Firestore Write Failed. Saving to Session Cache.", error);
-    const fakeId = 'temp_' + Date.now();
-    const newItem = { id: fakeId, ...data };
-    if (!SESSION_CACHE[collectionName]) SESSION_CACHE[collectionName] = [];
-    SESSION_CACHE[collectionName].push(newItem);
-    return Promise.resolve({ id: fakeId });
+    console.warn("Firestore Write Failed. Kept in Session Cache.", error);
+    return { id: fakeId };
+  }
+};
+
+export const updateDocument = async (collectionName: string, docId: string, data: any) => {
+  // 1. Optimistic Update: Session Cache (Array lists)
+  if (SESSION_CACHE[collectionName]) {
+    const index = SESSION_CACHE[collectionName].findIndex(item => item.id === docId);
+    if (index !== -1) {
+      SESSION_CACHE[collectionName][index] = { ...SESSION_CACHE[collectionName][index], ...data };
+    }
+  }
+
+  // 2. Optimistic Update: Doc Cache (Single docs)
+  const cacheKey = `${collectionName}/${docId}`;
+  if (DOC_CACHE[cacheKey]) {
+    DOC_CACHE[cacheKey] = { ...DOC_CACHE[cacheKey], ...data };
+  } else {
+    DOC_CACHE[cacheKey] = data;
+  }
+
+  // 3. Real Firestore Update
+  try {
+    const docRef = doc(db, collectionName, docId);
+    // We use updateDoc for strict updates, but since we might be dealing with "temp" ids or partial data
+    // in a prototype, we'll use setDoc with merge to be safe and robust.
+    return await setDoc(docRef, data, { merge: true });
+  } catch (error) {
+    console.error("Firestore Update Error:", error);
+    // Don't throw, keep optimistic UI state
   }
 };
 
 export const setDocument = async (collectionName: string, docId: string, data: any) => {
-  // Update Cache Immediately
-  DOC_CACHE[`${collectionName}/${docId}`] = data;
-  
-  try {
-    const docRef = doc(db, collectionName, docId);
-    return await setDoc(docRef, data, { merge: true });
-  } catch (error: any) {
-    console.error("Firestore Set Error (using cache only):", error);
-    // We return success so UI doesn't complain, effectively "Working Offline"
-    return Promise.resolve();
-  }
+  // Alias for updateDocument logic for singletons, but implies "Create or Replace"
+  return updateDocument(collectionName, docId, data);
 };
 
 export const deleteDocument = async (collectionName: string, id: string) => {
+  // 1. Optimistic Delete
+  if (SESSION_CACHE[collectionName]) {
+    SESSION_CACHE[collectionName] = SESSION_CACHE[collectionName].filter(item => item.id !== id);
+  }
+  delete DOC_CACHE[`${collectionName}/${id}`];
+
+  // 2. Real Firestore Delete
   try {
-    if (id.startsWith('temp_')) {
-      if (SESSION_CACHE[collectionName]) {
-        SESSION_CACHE[collectionName] = SESSION_CACHE[collectionName].filter(item => item.id !== id);
-        return Promise.resolve();
-      }
+    if (!id.startsWith('temp_')) {
+        const docRef = doc(db, collectionName, id);
+        return await deleteDoc(docRef);
     }
-    const docRef = doc(db, collectionName, id);
-    return await deleteDoc(docRef);
   } catch (error) {
     console.error("Firestore Delete Error:", error);
     throw error;

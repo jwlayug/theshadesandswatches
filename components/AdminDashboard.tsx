@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { auth, addToCollection, getCollection, deleteDocument, getDocument, setDocument } from '../services/firebase';
+import { auth, addToCollection, getCollection, deleteDocument, getDocument, setDocument, updateDocument } from '../services/firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { PortfolioCategory, PortfolioProject, ServiceItem, Testimonial, GeneralContent, ClientLogo } from '../types';
 import { Trash2, Plus, LogOut, Loader2, Lock, ArrowLeft, Settings, FileText, MessageSquare, Briefcase, Home, Image as ImageIcon, LayoutGrid, Star, Save, X, User as UserIcon, ShieldCheck, Megaphone, Pencil } from 'lucide-react';
@@ -392,7 +392,7 @@ const GeneralEditor: React.FC = () => {
           <div className="bg-white p-8 rounded-sm shadow-sm border border-gray-100 relative overflow-hidden">
              <div className="absolute top-0 left-0 w-1 h-full bg-brand-gold"></div>
              <h3 className="text-lg font-serif font-bold mb-6 text-brand-dark flex items-center gap-2">
-                <Megaphone className="w-5 h-5 text-brand-gold"/> Call To Action Banner
+                <Megaphone className="w-5 h-5 text-brand-gold"/> Call To Action Banner (Our Craft)
              </h3>
              <div className="space-y-6">
                 <InputGroup label="Banner Title (HTML Allowed)">
@@ -713,7 +713,7 @@ const PortfolioManager: React.FC = () => {
     if (!editCatData || !editCatData.id) return;
     setSaving(true);
     const { id, ...data } = editCatData;
-    await setDocument('categories', id, data);
+    await updateDocument('categories', id, data);
     setEditCatData(null);
     setView('list');
     await refresh();
@@ -730,7 +730,7 @@ const PortfolioManager: React.FC = () => {
     if (!editProjData || !editProjData.id) return;
     setSaving(true);
     const { id, ...data } = editProjData;
-    await setDocument('projects', id, data);
+    await updateDocument('projects', id, data);
     setEditProjData(null);
     setView('list');
     await refresh();
@@ -817,7 +817,7 @@ const PortfolioManager: React.FC = () => {
              </InputGroup>
              <div className="flex justify-end gap-4">
                <button type="button" onClick={() => setView('list')} className="text-gray-400 font-bold text-xs uppercase tracking-widest px-4 hover:text-brand-dark">Cancel</button>
-               <PrimaryButton type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create Category'}</PrimaryButton>
+               <PrimaryButton type="submit" disabled={saving}>{saving ? 'Create Category' : 'Create Category'}</PrimaryButton>
              </div>
           </form>
         </div>
